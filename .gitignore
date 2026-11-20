@@ -8,3 +8,4 @@ auth.json
 *.log
 *.tgz
 *.wasm
+!.qwenwork-runtime/qoder-auth-wasm/qoder_auth_wasm_bg.wasm

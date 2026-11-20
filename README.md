@@ -11,7 +11,7 @@
 
 - Node.js 22.19 或更高版本。
 - 已安装 Pi 或 Pi Web。插件基于 Pi 1.5.2 和 Pi Web 0.17.0 开发。
-- 运行 Pi 的机器上已安装千问办公中国大陆版桌面 App。插件需要 App 随附的签名组件，但不需要启动 App 或在其中登录。开发时使用千问办公 2.1.0。
+- 需要千问办公中国大陆版的官方签名组件。可以配置使用源码仓库中的 `.qwenwork-runtime/qoder-auth-wasm/qoder_auth_wasm_bg.wasm`，也可以安装官方桌面 App 供插件自动查找；不需要启动 App 或在其中登录。仓库中的组件提取自千问办公 2.1.0，不属于本项目 MIT 许可范围。
 
 ### 安装
 
@@ -82,6 +82,12 @@ pi --list-models qwenwork-browser
 
 环境变量优先于本地配置。`.qwenwork.local.json` 不应提交到 Git。
 
+### 使用仓库中的签名组件
+
+通过 Git 克隆源码后，将 `QWENWORK_WASM_PATH` 设置为仓库内 `.qwenwork-runtime/qoder-auth-wasm/qoder_auth_wasm_bg.wasm` 的绝对路径，再启动 Pi。也可以在 `.qwenwork.local.json` 中将 `appPath` 设置为仓库内 `.qwenwork-runtime` 目录的绝对路径。插件目前不会自动查找该目录；本机配置不会随 Git 推送，换机器后需重新配置。当前 npm 打包清单不包含此目录。
+
+该组件与官方 App 中的文件一致，不包含账号凭据。仅复制组件时，未设置版本环境变量会使用代码中的默认客户端版本；如需匹配该组件的来源版本，可设置 `QWENWORK_CLIENT_VERSION=2.1.0` 和 `QWENWORK_RELEASE_VERSION=2.1.0-26111906`。可用 `npm run doctor` 离线检查签名。
+
 ## 升级与排查
 
 - **曾用旧目录安装：**移除旧路径的全局插件登记，只保留新路径或 GitHub 安装。供应商 ID 仍是 `qwenwork-browser`，改名不需要重新授权。
@@ -94,7 +100,7 @@ pi --list-models qwenwork-browser
 
 - 插件不主动把 Pi 会话同步到千问办公的聊天列表。发送给模型的提示词、上下文、工具结果和图片仍由千问办公服务端处理；使用组织账号前，请确认组织的审计和数据处理政策。
 - 授权凭据由 Pi 保存在自己的 `auth.json` 中。不要分享该文件。要退出授权，可通过 Pi Web 模型面板断开连接，或在终端 Pi 执行 `/logout`。
-- 本项目不分发千问办公 App 或官方 WASM，不关闭 TLS 校验，也不启动本地代理端口。不支持海外站或企业 VPC；官方客户端或服务接口升级可能影响兼容性。
+- 源码仓库包含一份官方 WASM 签名组件，不包含完整千问办公 App 或账号凭据；组件来源和许可边界见 [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md)。插件不关闭 TLS 校验，也不启动本地代理端口。不支持海外站或企业 VPC；官方客户端或服务接口升级可能影响兼容性。
 
 ## 开发与测试
 

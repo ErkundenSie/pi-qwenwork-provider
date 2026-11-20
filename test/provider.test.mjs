@@ -5,6 +5,7 @@ import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import { resolve } from 'node:path'
 import { createQwenworkProvider, PROVIDER_ID } from '../lib/provider.mjs'
+import { buildRequest } from '../lib/chat.mjs'
 
 const runtime = { version: '2.1.0', releaseVersion: '2.1.0-26111906' }
 const credentials = { access: 'test-access-secret', refresh: 'test-refresh-secret', uid: '42', machineId: 'test-device', email: 'test@example.invalid' }
@@ -213,6 +214,27 @@ async function run(config, messages = [user], options = {}) {
   const model = config.getModels()[0]
   return config.streamSimple(model, { messages }, { apiKey: (await config.auth.oauth.toAuth(credentials)).apiKey, ...options }).result()
 }
+
+test('the request uses the desktop output budget and preserves lower caller limits', () => {
+  const request = { model: 'deepseek-flash', messages: [user] }
+  assert.equal(buildRequest(request).parameters.max_tokens, 32768)
+  assert.equal(buildRequest({ ...request, max_completion_tokens: 16384 }).parameters.max_tokens, 16384)
+  assert.equal(buildRequest({ ...request, max_tokens: 90000 }).parameters.max_tokens, 32768)
+  assert.throws(() => buildRequest({ ...request, max_tokens: -1 }), /正整数/)
+})
+
+test('host SDK sends the 32K budget for DeepSeek Flash with reasoning enabled', sdk, async () => {
+  let signed
+  const config = await sdkConfig(frame(chunk({ content: 'ok' }, 'stop')) + done, body => { signed = body })
+  const model = config.getModels().find(m => m.id === 'deepseek-flash')
+  const auth = await config.auth.oauth.toAuth(credentials)
+  const result = await config.streamSimple(model, { messages: [user] }, { ...auth, reasoning: 'high' }).result()
+  assert.equal(result.stopReason, 'stop', result.errorMessage)
+  assert.equal(signed.model_config.key, 'deepseek-flash')
+  assert.equal(signed.model_config.is_reasoning, true)
+  assert.equal(signed.model_config.max_input_tokens, 1_000_000)
+  assert.equal(signed.parameters.max_tokens, 32768)
+})
 
 test('host SDK streams Chinese text, thinking and upstream usage through the in-process adapter', sdk, async () => {
   const config = await sdkConfig(frame(chunk({ reasoning_content: '思考' })) +

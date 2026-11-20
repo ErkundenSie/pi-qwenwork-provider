@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { fetchCatalog, parseCatalog } from '../lib/catalog.mjs'
+import { fetchCatalog, outputTokenLimit, parseCatalog } from '../lib/catalog.mjs'
 import { createQwenworkProvider, PROVIDER_ID } from '../lib/provider.mjs'
 
 const runtime = { version: '2.1.0' }
@@ -40,10 +40,39 @@ test('catalog validates enabled hosted chat models and preserves Pi tier IDs', (
   assert.deepEqual([...catalog.keys()], ['qwork-auto', 'qwork-advanced', 'fresh', 'bad-label'])
   assert.equal(catalog.get('qwork-auto').key, 'flash')
   assert.equal(catalog.get('qwork-advanced').key, 'pro')
-  assert.deepEqual(catalog.get('fresh'), { id: 'fresh', key: 'fresh', name: '新模型', reasoning: true, vision: true })
+  assert.deepEqual(catalog.get('fresh'), { id: 'fresh', key: 'fresh', name: '新模型', reasoning: true, vision: true, maxOutputTokens: undefined })
   assert.equal(catalog.get('bad-label').name, 'bad-label')
   assert.throws(() => parseCatalog({ schema_version: 3, catalog: [] }), /格式/)
   assert.throws(() => parseCatalog(payload(row('off', { enable: false }))), /没有返回可用/)
+})
+
+test('uses the desktop output fallback and explicit catalog caps, including across cache upgrades', async () => {
+  const provider = createQwenworkProvider({}, {
+    runtimeProvider: () => runtime,
+    fetchImpl: async () => Response.json(payload(
+      row('deepseek-flash', { max_input_tokens: 1000000 }),
+      row('capped', { max_output_tokens: 16384 }),
+      row('camel', { maxOutputTokens: 65536 }),
+      row('invalid', { max_output_tokens: -1 }),
+    )),
+  })
+  assert.ok(provider.getModels().every(m => m.contextWindow === 1_000_000))
+  assert.equal(provider.getModels().find(m => m.id === 'deepseek-flash').maxTokens, 32768)
+  const state = harness()
+  await state.refresh(provider, { allowNetwork: true })
+  const offline = createQwenworkProvider({}, { fetchImpl: () => assert.fail('cache-only I/O') })
+  const entry = state.stored
+  // Old caches may contain adapter defaults rather than catalog limits.
+  Object.assign(entry.models.find(m => m.id === 'deepseek-flash'), { contextWindow: 131072, maxTokens: 8192 })
+  await harness(entry).refresh(offline)
+  const models = offline.getModels()
+  assert.deepEqual(models.map(m => [m.id, m.contextWindow, m.maxTokens]), [
+    ['deepseek-flash', 1_000_000, 32768],
+    ['capped', 1_000_000, 16384],
+    ['camel', 1_000_000, 65536],
+    ['invalid', 1_000_000, 32768],
+  ])
+  assert.equal(outputTokenLimit({ maxOutputTokens: 393216 }), 131072)
 })
 
 test('uses host cache across instances without mixing accounts; force refresh replaces and failure preserves it', async () => {

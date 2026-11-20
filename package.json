@@ -7,7 +7,7 @@
   "license": "MIT",
   "repository": { "type": "git", "url": "git+https://github.com/ErkundenSie/pi-qwenwork-provider.git" },
   "engines": { "node": ">=22.19.0" },
-  "files": ["index.mjs", "lib/", "scripts/doctor.mjs", "CHANGELOG.md", "THIRD_PARTY_NOTICES.md", ".qwenwork.example.json"],
+  "files": ["index.mjs", "lib/", "scripts/doctor.mjs", "CHANGELOG.md", "THIRD_PARTY_NOTICES.md", ".qwenwork.example.json", ".qwenwork-runtime/qoder-auth-wasm/qoder_auth_wasm_bg.wasm"],
   "peerDependencies": { "@earendil-works/pi-ai": "*" },
   "keywords": ["pi-package", "qwenwork"],
   "pi": { "extensions": ["./index.mjs"] },

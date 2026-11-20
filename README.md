@@ -11,7 +11,7 @@
 
 - Node.js 22.19 或更高版本。
 - 已安装 Pi 或 Pi Web。插件基于 Pi 1.5.2 和 Pi Web 0.17.0 开发。
-- 需要千问办公中国大陆版的官方签名组件。可以配置使用源码仓库中的 `.qwenwork-runtime/qoder-auth-wasm/qoder_auth_wasm_bg.wasm`，也可以安装官方桌面 App 供插件自动查找；不需要启动 App 或在其中登录。仓库中的组件提取自千问办公 2.1.0，不属于本项目 MIT 许可范围。
+- 插件已附带千问办公中国大陆版 2.1.0 的官方 WASM 签名组件，并自动加载；无需安装或启动官方桌面 App，也无需手动配置组件路径。该官方组件不属于本项目 MIT 许可范围。
 
 ### 安装
 
@@ -71,7 +71,7 @@ pi --list-models qwenwork-browser
 
 ## 配置
 
-插件会自动查找常见的千问办公安装位置，包括 Windows 的版本子目录。自定义安装路径时，可在**插件根目录**将 [`.qwenwork.example.json`](./.qwenwork.example.json) 复制为 `.qwenwork.local.json`，并修改 `appPath`。
+默认自动加载插件目录内的签名组件，路径相对于插件位置解析，与启动目录无关。也支持自动查找常见的千问办公安装位置，包括 Windows 的版本子目录。需要覆盖默认组件时，可在**插件根目录**将 [`.qwenwork.example.json`](./.qwenwork.example.json) 复制为 `.qwenwork.local.json`，并修改 `appPath`。
 
 也可以在启动 Pi 或 Pi Web 前设置以下环境变量：
 
@@ -82,17 +82,17 @@ pi --list-models qwenwork-browser
 
 环境变量优先于本地配置。`.qwenwork.local.json` 不应提交到 Git。
 
-### 使用仓库中的签名组件
+### 自动加载随附组件
 
-通过 Git 克隆源码后，将 `QWENWORK_WASM_PATH` 设置为仓库内 `.qwenwork-runtime/qoder-auth-wasm/qoder_auth_wasm_bg.wasm` 的绝对路径，再启动 Pi。也可以在 `.qwenwork.local.json` 中将 `appPath` 设置为仓库内 `.qwenwork-runtime` 目录的绝对路径。插件目前不会自动查找该目录；本机配置不会随 Git 推送，换机器后需重新配置。当前 npm 打包清单不包含此目录。
+Git 源码和 npm 安装包均包含 `.qwenwork-runtime/qoder-auth-wasm/qoder_auth_wasm_bg.wasm`，换机器或移动整个插件目录后无需重新配置路径。查找顺序为：`QWENWORK_WASM_PATH` → 显式指定的 App 目录（环境变量或本地配置）→ 插件随附组件 → 系统常见安装位置。
 
-该组件与官方 App 中的文件一致，不包含账号凭据。仅复制组件时，未设置版本环境变量会使用代码中的默认客户端版本；如需匹配该组件的来源版本，可设置 `QWENWORK_CLIENT_VERSION=2.1.0` 和 `QWENWORK_RELEASE_VERSION=2.1.0-26111906`。可用 `npm run doctor` 离线检查签名。
+组件与官方 App 中的文件一致，不包含账号凭据。插件按 SHA-256 识别这份组件并自动使用来源版本 `2.1.0` / `2.1.0-26111906`，无需复制完整 App 或设置版本变量。仍可用 `QWENWORK_CLIENT_VERSION` 和 `QWENWORK_RELEASE_VERSION` 显式覆盖版本。Windows、Linux 和 macOS 使用同一份 WASM；可在目标系统运行 `npm run doctor` 离线检查签名。
 
 ## 升级与排查
 
 - **曾用旧目录安装：**移除旧路径的全局插件登记，只保留新路径或 GitHub 安装。供应商 ID 仍是 `qwenwork-browser`，改名不需要重新授权。
 - **找不到供应商或模型列表未更新：**确认插件是全局安装，执行 `/reload` 后重新打开模型面板，再点击 **刷新模型目录**。如果仍显示旧列表，等当前任务结束后重启 Pi Web。
-- **找不到签名组件：**检查 App 是否安装在运行 Pi 的同一台机器上；自定义目录按上文配置。在源码目录运行 `npm run doctor` 检查组件。
+- **找不到签名组件：**检查插件的 `.qwenwork-runtime` 目录是否完整，必要时重新安装插件；如使用自定义组件，按上文检查路径。在源码目录运行 `npm run doctor` 检查组件。
 - **DeepSeek-V4.1-Flash 到达输出上限但没有正文或工具调用：**通常是思考用尽了单次输出预算，不是上下文已满。插件在该模型有文件工具时提示它先做一个最小的可运行版本；若仍失败，在用户消息里指定第一个小步骤（例如「先直接写一个精简版，再完善」），或切换到另一个模型。插件不会自动重试或换模型。Pi Web 的压缩按钮报循环 JSON 错误时，可用 `/compact` 绕过该前端错误，但压缩不会提高输出上限。
 - **授权已失效：**在模型面板为 **QwenWork (OAuth)** 重新登录，不要手动配置 API Key。
 

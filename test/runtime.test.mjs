@@ -51,23 +51,32 @@ test('other components retain their fallback version instead of borrowing bundle
     assert.equal(runtime.releaseVersion, '1.3.2-26101704')
   } finally { fs.rmSync(root, { recursive: true, force: true }) }
 })
-test('relocated plugin loads its bundled component without local config or environment', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'qw-relocated-'))
-  try {
-    fs.mkdirSync(path.join(root, 'lib'))
-    for (const name of ['runtime-config.mjs', 'runtime.mjs', 'constants.mjs']) {
-      fs.copyFileSync(new URL(`../lib/${name}`, import.meta.url), path.join(root, 'lib', name))
-    }
-    fs.cpSync(new URL('../.qwenwork-runtime/', import.meta.url), path.join(root, '.qwenwork-runtime'), { recursive: true })
-    const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.toUpperCase().startsWith('QWENWORK_')))
-    const moduleUrl = pathToFileURL(path.join(root, 'lib/runtime-config.mjs')).href
-    const result = spawnSync(process.execPath, ['--input-type=module', '-e', `import { getRuntime } from ${JSON.stringify(moduleUrl)}; console.log(JSON.stringify(getRuntime()))`], { cwd: os.tmpdir(), env, encoding: 'utf8' })
-    assert.equal(result.status, 0, result.stderr)
-    const runtime = JSON.parse(result.stdout)
-    assert.equal(runtime.wasmPath, path.join(root, '.qwenwork-runtime/qoder-auth-wasm/qoder_auth_wasm_bg.wasm'))
-    assert.equal(runtime.version, '2.1.0')
-    assert.equal(runtime.releaseVersion, '2.1.0-26111906')
-  } finally { fs.rmSync(root, { recursive: true, force: true }) }
+test('relocated plugin loads its bundled component without local config or environment', async t => {
+  for (const linked of [false, true]) {
+    await t.test(linked ? 'symlinked plugin directory' : 'ordinary plugin directory', () => {
+      const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'qw-relocated-'))
+      const root = path.join(temp, 'plugin')
+      try {
+        fs.mkdirSync(path.join(root, 'lib'), { recursive: true })
+        for (const name of ['runtime-config.mjs', 'runtime.mjs', 'constants.mjs']) {
+          fs.copyFileSync(new URL(`../lib/${name}`, import.meta.url), path.join(root, 'lib', name))
+        }
+        fs.cpSync(new URL('../.qwenwork-runtime/', import.meta.url), path.join(root, '.qwenwork-runtime'), { recursive: true })
+        const entryRoot = linked ? path.join(temp, 'linked-plugin') : root
+        if (linked) fs.symlinkSync(root, entryRoot, process.platform === 'win32' ? 'junction' : 'dir')
+        const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.toUpperCase().startsWith('QWENWORK_')))
+        const moduleUrl = pathToFileURL(path.join(entryRoot, 'lib/runtime-config.mjs')).href
+        const result = spawnSync(process.execPath, ['--input-type=module', '-e', `import { getRuntime } from ${JSON.stringify(moduleUrl)}; console.log(JSON.stringify(getRuntime()))`], { cwd: os.tmpdir(), env, encoding: 'utf8' })
+        assert.equal(result.status, 0, result.stderr)
+        const runtime = JSON.parse(result.stdout)
+        // macOS /var aliases /private/var; ESM also resolves directory symlinks.
+        const expectedWasm = path.join(entryRoot, '.qwenwork-runtime/qoder-auth-wasm/qoder_auth_wasm_bg.wasm')
+        assert.equal(fs.realpathSync(runtime.wasmPath), fs.realpathSync(expectedWasm))
+        assert.equal(runtime.version, '2.1.0')
+        assert.equal(runtime.releaseVersion, '2.1.0-26111906')
+      } finally { fs.rmSync(temp, { recursive: true, force: true }) }
+    })
+  }
 })
 test('unknown signing ABI is rejected before a request can be sent', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'qw-abi-'))

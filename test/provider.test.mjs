@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto'
 import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import { resolve } from 'node:path'
-import { createProviderConfig, PROVIDER_ID } from '../lib/provider.mjs'
+import { createQwenworkProvider, PROVIDER_ID } from '../lib/provider.mjs'
 
 const runtime = { version: '2.1.0', releaseVersion: '2.1.0-26111906' }
 const credentials = { access: 'test-access-secret', refresh: 'test-refresh-secret', uid: '42', machineId: 'test-device', email: 'test@example.invalid' }
@@ -13,25 +13,25 @@ const user = { role: 'user', content: '你好', timestamp: 1 }
 
 test('registers both tiers and all desktop designated models without I/O', () => {
   const fail = () => assert.fail('eager I/O')
-  const config = createProviderConfig({}, { runtimeProvider: fail, fetchImpl: fail })
+  const config = createQwenworkProvider({}, { runtimeProvider: fail, fetchImpl: fail })
   assert.equal(PROVIDER_ID, 'qwenwork-browser')
-  assert.deepEqual(config.models.map(model => model.id), [
+  assert.deepEqual(config.getModels().map(model => model.id), [
     'qwork-auto', 'qwork-advanced', 'qwen4-max', 'qwen3.8-max-preview', 'qwen3.8-flash',
     'ling-3.1-flash', 'deepseek-flash', 'deepseek-v4-pro', 'glm-5.3', 'glm-5.3-flash',
     'kimi-k3.1-pro', 'minimax-m3.1-flash', 'step-5-preview',
   ])
-  const model = id => config.models.find(model => model.id === id)
+  const model = id => config.getModels().find(model => model.id === id)
   assert.equal(model('deepseek-flash').name, 'DeepSeek-V4.1-Flash')
   assert.deepEqual(model('qwen4-max').input, ['text', 'image'])
   assert.deepEqual(model('ling-3.1-flash').input, ['text'])
   assert.equal(config.name, 'QwenWork (OAuth)')
-  assert.equal(config.oauth.name, config.name)
-  assert.notEqual(config.api, 'openai-completions')
+  assert.equal(config.auth.oauth.name, config.name)
+  assert.notEqual(config.getModels()[0].api, 'openai-completions')
 })
 
 test('Pi Web style auth_url plus polling requires no pasted code and leaves the App login untouched', async () => {
   let link, seen = 0
-  const config = createProviderConfig({}, {
+  const config = createQwenworkProvider({}, {
     runtimeProvider: () => runtime,
     loginOptions: { interval: 1 },
     async fetchImpl(input, init) {
@@ -46,35 +46,36 @@ test('Pi Web style auth_url plus polling requires no pasted code and leaves the 
         return Response.json({ token: credentials.access, refresh_token: credentials.refresh, expires_in: 3600 })
       }
       assert.equal(init.headers.Authorization, 'Bearer ' + credentials.access)
+      if (url.pathname === '/api/desktop/chat-modes') return new Response(null, { status: 503 })
       return Response.json({ user: { id: credentials.uid, email: credentials.email } })
     },
   })
-  const auth = await config.oauth.login({
-    onAuth: ({ url }) => { link = new URL(url) },
-    onPrompt: () => assert.fail('requires user input'),
+  const auth = await config.auth.oauth.login({
+    notify: ({ type, url }) => { assert.equal(type, 'auth_url'); link = new URL(url) },
+    prompt: () => assert.fail('requires user input'),
   })
   assert.equal(auth.machineId, link.searchParams.get('machine_id'))
   assert.equal(auth.uid, credentials.uid)
   assert.equal(auth.refresh, credentials.refresh)
-  const key = config.oauth.getApiKey(auth)
+  const key = (await config.auth.oauth.toAuth(auth)).apiKey
   assert.ok(!Buffer.from(key.split(':')[1], 'base64url').toString().includes(credentials.refresh))
 })
 
 test('login cancellation prevents any subsequent poll', async () => {
   const ctrl = new AbortController()
-  const config = createProviderConfig({}, { runtimeProvider: () => runtime, fetchImpl: () => assert.fail('sent after abort') })
-  await assert.rejects(config.oauth.login({
+  const config = createQwenworkProvider({}, { runtimeProvider: () => runtime, fetchImpl: () => assert.fail('sent after abort') })
+  await assert.rejects(config.auth.oauth.login({
     signal: ctrl.signal,
-    onAuth: () => ctrl.abort(),
+    notify: () => ctrl.abort(),
   }), { name: 'AbortError' })
 })
 
 test('expired authorization is sanitized and prompts for browser re-login', async () => {
-  const config = createProviderConfig({}, {
+  const config = createQwenworkProvider({}, {
     runtimeProvider: () => runtime,
     fetchImpl: async () => Response.json({ error: { message: credentials.refresh } }, { status: 401 }),
   })
-  await assert.rejects(config.oauth.refreshToken(credentials, new AbortController().signal), /重新登录/)
+  await assert.rejects(config.auth.oauth.refresh(credentials, new AbortController().signal), /重新登录/)
 })
 
 function fakeAdapter() {
@@ -89,19 +90,19 @@ function fakeAdapter() {
 }
 
 test('missing login is an HTTP 401 and never sends an inference request', async () => {
-  const config = createProviderConfig(fakeAdapter(), { fetchImpl: () => assert.fail('request without auth') })
+  const config = createQwenworkProvider(fakeAdapter(), { fetchImpl: () => assert.fail('request without auth') })
   const response = await config.streamSimple({ id: 'qwork-auto' }, {}, {})
   assert.equal(response.status, 401)
   assert.match(await response.text(), /登录/)
 })
 
 test('an unexpected signed destination is rejected before transmitting anything', async () => {
-  const config = createProviderConfig(fakeAdapter(), {
+  const config = createQwenworkProvider(fakeAdapter(), {
     runtimeProvider: () => runtime,
     signer: async () => ({ url: 'https://example.invalid/' }),
     fetchImpl: () => assert.fail('request left the allowlist'),
   })
-  const response = await config.streamSimple({ id: 'qwork-auto' }, {}, { apiKey: config.oauth.getApiKey(credentials) })
+  const response = await config.streamSimple({ id: 'qwork-auto' }, {}, { apiKey: (await config.auth.oauth.toAuth(credentials)).apiKey })
   assert.equal(response.status, 502)
   assert.match(await response.text(), /拒绝/)
 })
@@ -114,11 +115,11 @@ const chunk = (delta, finish_reason = null) => ({
 })
 
 test('uses the selected model key in the signed payload and headers for every model', async () => {
-  const config = createProviderConfig(fakeAdapter(), {
+  const config = createQwenworkProvider(fakeAdapter(), {
     runtimeProvider: () => runtime,
     async signer(input) {
       const body = JSON.parse(input.body)
-      const model = config.models.find(model => model.id === input.modelKey)
+      const model = config.getModels().find(model => model.id === input.modelKey)
       assert.ok(model)
       assert.equal(body.model_config.key, model.id)
       assert.equal(body.chat_context.extra.modelConfig.key, model.id)
@@ -131,12 +132,50 @@ test('uses the selected model key in the signed payload and headers for every mo
       return new Response(frame(chunk({ content: 'ok' }, 'stop')) + done)
     },
   })
-  for (const model of config.models) {
-    const response = await config.streamSimple(model, {}, { apiKey: config.oauth.getApiKey(credentials) })
+  for (const model of config.getModels()) {
+    const response = await config.streamSimple(model, {}, { apiKey: (await config.auth.oauth.toAuth(credentials)).apiKey })
     assert.equal(response.status, 200, model.id)
     const raw = (await response.text()).split('\n').find(line => line.startsWith('data: {'))
     assert.equal(JSON.parse(raw.slice(6)).model, model.id)
   }
+})
+
+test('routes newly discovered model keys and standard tier aliases without accepting removed IDs', async () => {
+  const credential = { ...credentials, type: 'oauth' }
+  const route = (key, is_vl) => ({ key, is_vl, enable: true, source: 'system', format: 'openai/chat-completions' })
+  const config = createQwenworkProvider(fakeAdapter(), {
+    runtimeProvider: () => runtime,
+    async signer(input) {
+      const body = JSON.parse(input.body)
+      assert.equal(body.model_config.key, input.modelKey)
+      assert.equal(body.chat_context.extra.modelConfig.key, input.modelKey)
+      assert.equal(body.model_config.is_vl, input.modelKey === 'fresh')
+      return { url: chatPath, body: input.modelKey, headers: {} }
+    },
+    async fetchImpl(url, init) {
+      if (url.endsWith('/api/desktop/chat-modes')) {
+        return Response.json({ schema_version: 2, catalog: [route('flash', false), route('fresh', true)] })
+      }
+      assert.equal(url, chatPath)
+      assert.ok(['flash', 'fresh'].includes(init.body))
+      assert.equal(init.headers['X-Model-Key'], init.body)
+      return new Response(frame(chunk({ content: 'ok' }, 'stop')) + done)
+    },
+  })
+  await config.refreshModels({
+    allowNetwork: true, credential, signal: new AbortController().signal,
+    async publish({ update }) { update(); return true },
+  })
+  assert.deepEqual(config.getModels().map(model => model.id), ['qwork-auto', 'fresh'])
+  const auth = await config.auth.oauth.toAuth(credential)
+  for (const model of config.getModels()) {
+    const response = await config.streamSimple(model, {}, auth)
+    assert.equal(response.status, 200, model.id)
+    const raw = (await response.text()).split('\n').find(line => line.startsWith('data: {'))
+    assert.equal(JSON.parse(raw.slice(6)).model, model.id)
+  }
+  const removed = await config.streamSimple({ id: 'qwen4-max' }, {}, auth)
+  assert.equal(removed.status, 400)
 })
 
 let compatUrl
@@ -152,7 +191,7 @@ const sdk = { skip: !compatUrl && 'Set PI_QWENWORK_SDK_ROOT to the pi-web packag
 
 async function sdkConfig(sse, inspect = () => {}) {
   const { openAICompletionsApi } = await import(compatUrl)
-  return createProviderConfig(openAICompletionsApi(), {
+  return createQwenworkProvider(openAICompletionsApi(), {
     runtimeProvider: () => runtime,
     async signer(input) {
       assert.equal(input.accessToken, credentials.access)
@@ -170,9 +209,9 @@ async function sdkConfig(sse, inspect = () => {}) {
   })
 }
 
-function run(config, messages = [user], options = {}) {
-  const model = { ...config.models[0], baseUrl: config.baseUrl, provider: PROVIDER_ID, api: config.api }
-  return config.streamSimple(model, { messages }, { apiKey: config.oauth.getApiKey(credentials), ...options }).result()
+async function run(config, messages = [user], options = {}) {
+  const model = config.getModels()[0]
+  return config.streamSimple(model, { messages }, { apiKey: (await config.auth.oauth.toAuth(credentials)).apiKey, ...options }).result()
 }
 
 test('host SDK streams Chinese text, thinking and upstream usage through the in-process adapter', sdk, async () => {

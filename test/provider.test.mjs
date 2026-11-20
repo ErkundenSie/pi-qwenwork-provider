@@ -24,7 +24,8 @@ test('registers both tiers and all desktop designated models without I/O', () =>
   assert.equal(model('deepseek-flash').name, 'DeepSeek-V4.1-Flash')
   assert.deepEqual(model('qwen4-max').input, ['text', 'image'])
   assert.deepEqual(model('ling-3.1-flash').input, ['text'])
-  assert.match(config.oauth.name, /浏览器授权/)
+  assert.equal(config.name, 'QwenWork (OAuth)')
+  assert.equal(config.oauth.name, config.name)
   assert.notEqual(config.api, 'openai-completions')
 })
 

@@ -1,64 +1,103 @@
 # pi-qwenwork-provider
 
-把**千问办公**接入 [Pi](https://pi.dev/) 和 [Pi Web](https://github.com/agegr/pi-web)。插件通过浏览器独立授权，使用你自己的账号与办公积分。**不需要 Magpie 或 API Key，不读取或写回千问办公桌面 App 的登录凭据。**
+[![CI](https://github.com/ErkundenSie/pi-qwenwork-provider/actions/workflows/ci.yml/badge.svg)](https://github.com/ErkundenSie/pi-qwenwork-provider/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 
-## 安装与使用
+为 [Pi](https://pi.dev/) 和 [Pi Web](https://github.com/agegr/pi-web) 接入千问办公模型的非官方插件。使用自己的千问办公账号在浏览器授权，无需 API Key 或 Magpie，也不会读取桌面 App 的登录凭据。
 
-前提：Node.js 22.19+、Pi 或 Pi Web，以及本机安装的千问办公中国大陆版桌面 App。App 不必保持运行，但需要它随附的静态签名组件。本项目按 Pi **1.5.2**、Pi Web **0.17.0** 和千问办公 **2.1.0** 的环境开发。
+## 快速开始
 
-1. 在 Pi Web 的**插件**页面选择全局安装，粘贴 `git:github.com/ErkundenSie/pi-qwenwork-provider`。也可在终端运行：
-   ```sh
-   pi install git:github.com/ErkundenSie/pi-qwenwork-provider
-   ```
-   如需使用本地源码，填入源码目录的绝对路径，或在源码目录运行 `pi install .`。
-2. 打开 Pi Web 的**模型**面板，找到 **千问办公（浏览器授权）**，点击登录。打开授权链接确认，回到 Pi Web 等待完成，无需粘贴验证码。终端 Pi 可用 `/login`。
-3. 在新会话的模型选择器里选一个千问办公模型，发一句短消息测试。终端 Pi 用 `/model` 选择。
+### 前置要求
 
-从旧版升级时，请移除旧路径的全局插件登记，只保留一种安装来源，随后执行 `/reload`。**包名虽然改了，内部供应商 ID 仍是 `qwenwork-browser`**，不需要重新授权。若旧列表仍在，等任务结束后再重启 Pi Web。
+- Node.js 22.19 或更高版本。
+- 已安装 Pi 或 Pi Web。插件基于 Pi 1.5.2 和 Pi Web 0.17.0 开发。
+- 运行 Pi 的机器上已安装千问办公中国大陆版桌面 App。插件需要 App 随附的签名组件，但不需要启动 App 或在其中登录。开发时使用千问办公 2.1.0。
 
-## 模型目录
+### 安装
 
-标准和高级是千问办公的服务档位，不是 Pi 的思考强度。想固定具体模型，就直接选指定模型。Pi 的思考档位目前只用于生成是否开启推理的标记，不会切换模型，也不保证各档对应不同推理强度。
+**Pi Web：**打开 **设置 → 插件**，选择全局安装，填入 `git:github.com/ErkundenSie/pi-qwenwork-provider`。
 
-| 模型 | Pi 模型 ID |
+**Pi CLI：**在终端运行：
+
+```sh
+pi install git:github.com/ErkundenSie/pi-qwenwork-provider
+```
+
+如果使用本地源码，在 Pi Web 填入源码目录的绝对路径，或在源码根目录执行 `pi install .`。只保留一种安装来源，避免重复加载。
+
+### 登录并选择模型
+
+1. 在 Pi Web 打开 **设置 → 模型 → QwenWork (OAuth)**，点击登录；在终端 Pi 中使用 `/login`。
+2. 打开授权链接，在浏览器完成千问办公授权，然后返回 Pi 等待登录完成。无需粘贴验证码。
+3. 在新会话的模型选择器中选择一个 QwenWork 模型；在终端 Pi 中使用 `/model`。
+
+也可以在终端查看已加载的模型：
+
+```sh
+pi --list-models qwenwork-browser
+```
+
+## 模型
+
+| 显示名称 | 模型 ID |
 | --- | --- |
-| 标准 / 高级 | `qwork-auto` / `qwork-advanced` |
+| 千问办公 · 标准 | `qwork-auto` |
+| 千问办公 · 高级 | `qwork-advanced` |
 | Qwen4-Max | `qwen4-max` |
 | Qwen3.8-Max | `qwen3.8-max-preview` |
 | Qwen3.8-Flash | `qwen3.8-flash` |
 | Ling-3.1-Flash | `ling-3.1-flash` |
 | DeepSeek-V4.1-Flash | `deepseek-flash` |
 | DeepSeek-V4-Pro | `deepseek-v4-pro` |
-| GLM-5.3 / GLM-5.3-Flash | `glm-5.3` / `glm-5.3-flash` |
+| GLM-5.3 | `glm-5.3` |
+| GLM-5.3-Flash | `glm-5.3-flash` |
 | Kimi-K3.1-Pro | `kimi-k3.1-pro` |
 | MiniMax-M3.1-Flash | `minimax-m3.1-flash` |
 | Step-5-Preview | `step-5-preview` |
 
-这是千问办公 2.1.0 的目录快照，不会随套餐或上游自动更新。列出不代表每个模型都验证过实际推理；权限、实际消耗与兼容性以上游为准。部分模型不支持图片。Pi 不显示办公积分余额。
+**标准和高级是千问办公的服务档位，不是 Pi 的思考强度。** 想使用指定模型，直接选模型名称。当前插件只将 Pi 的思考设置转换为推理开关标记，不会切换模型，也不保证不同档位对应不同推理强度。
 
-## 非标准安装路径
+该列表是千问办公 2.1.0 的目录快照，不会自动更新。列出模型不代表已逐个实测推理；账号权限、能力和积分消耗以千问办公为准。Pi 不显示办公积分余额。
 
-插件会查找常见的 App 安装位置，包括 Windows 的版本子目录。找不到时，把 [`.qwenwork.example.json`](./.qwenwork.example.json) 复制为 `.qwenwork.local.json`，将 `appPath` 改为本机千问办公安装根目录。不要提交本地配置文件。
+## 配置
 
-也可在启动 Pi 或 Pi Web **之前**设置 `QWENWORK_APP_PATH`（App 根目录或 resources 目录）或 `QWENWORK_WASM_PATH`（签名文件路径）。环境变量优先于本地配置。
+插件会自动查找常见的千问办公安装位置，包括 Windows 的版本子目录。自定义安装路径时，可在**插件根目录**将 [`.qwenwork.example.json`](./.qwenwork.example.json) 复制为 `.qwenwork.local.json`，并修改 `appPath`。
 
-## 隐私与已知限制
+也可以在启动 Pi 或 Pi Web 前设置以下环境变量：
 
-- 插件不主动把 Pi 会话同步到千问办公界面。发送给模型的提示词、上下文、工具结果和图片仍由千问办公服务端处理。使用组织账号时，请先确认组织策略和审计范围。
-- 授权由 Pi 保存在自己的 `auth.json`。不要分享该文件；退出授权请用 Pi Web 模型面板或终端 `/logout`。
-- 这是非官方适配，不支持海外站和企业 VPC。App 或服务端协议更新后可能需要修改插件。项目不分发官方 App 或 WASM、不关闭 TLS 校验、不启动代理端口。
+| 变量 | 用途 |
+| --- | --- |
+| `QWENWORK_APP_PATH` | 千问办公安装根目录或 `resources` 目录。 |
+| `QWENWORK_WASM_PATH` | 直接指定本机官方 App 随附的 `qoder_auth_wasm_bg.wasm`。 |
+
+环境变量优先于本地配置。`.qwenwork.local.json` 不应提交到 Git。
+
+## 升级与排查
+
+- **曾用旧目录安装：**移除旧路径的全局插件登记，只保留新路径或 GitHub 安装。供应商 ID 仍是 `qwenwork-browser`，改名不需要重新授权。
+- **找不到供应商或模型列表未更新：**确认插件是全局安装，执行 `/reload` 后重新打开模型面板。如果仍显示旧列表，等当前任务结束后重启 Pi Web。
+- **找不到签名组件：**检查 App 是否安装在运行 Pi 的同一台机器上；自定义目录按上文配置。在源码目录运行 `npm run doctor` 检查组件。
+- **授权已失效：**在模型面板为 **QwenWork (OAuth)** 重新登录，不要手动配置 API Key。
+
+## 隐私与兼容性
+
+- 插件不主动把 Pi 会话同步到千问办公的聊天列表。发送给模型的提示词、上下文、工具结果和图片仍由千问办公服务端处理；使用组织账号前，请确认组织的审计和数据处理政策。
+- 授权凭据由 Pi 保存在自己的 `auth.json` 中。不要分享该文件。要退出授权，可通过 Pi Web 模型面板断开连接，或在终端 Pi 执行 `/logout`。
+- 本项目不分发千问办公 App 或官方 WASM，不关闭 TLS 校验，也不启动本地代理端口。不支持海外站或企业 VPC；官方客户端或服务接口升级可能影响兼容性。
 
 ## 开发与测试
+
+在源码根目录运行：
 
 ```sh
 npm test
 npm run doctor
 ```
 
-`npm test` 使用模拟网络；`npm run doctor` 用本机官方组件做离线自检，不登录、不发请求、不扣积分。要运行 Pi SDK 集成测试，将 `PI_QWENWORK_SDK_ROOT` 指向包含 `node_modules/@earendil-works/pi-ai` 的 Pi Web 安装目录或测试用依赖目录。未配置 SDK 或签名组件时，对应测试会跳过。
+`npm test` 使用模拟上游。将 `PI_QWENWORK_SDK_ROOT` 指向包含 `node_modules/@earendil-works/pi-ai` 的目录（例如 Pi Web 安装根目录）可启用 Pi SDK 集成测试；未找到测试依赖时对应测试会跳过。`npm run doctor` 使用本机签名组件离线检查，不登录、不发请求、不扣积分。
 
-见 [更新记录](./CHANGELOG.md)、[贡献指南](./CONTRIBUTING.md) 与 [安全报告指南](./SECURITY.md)。
+参见[贡献指南](./CONTRIBUTING.md)、[更新记录](./CHANGELOG.md)和[安全问题报告](./SECURITY.md)。
 
-## 许可与致谢
+## 许可证
 
-代码采用 [MIT 许可证](./LICENSE)。本插件基于 [tianyn1990/qwenwork-magpie v0.1.0](https://github.com/tianyn1990/qwenwork-magpie/tree/v0.1.0) 的协议适配代码开发，上游与第三方版权说明见 [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md)。千问办公官方组件不在本项目许可范围内。
+本项目采用 [MIT 许可证](./LICENSE)，基于 [qwenwork-magpie v0.1.0](https://github.com/tianyn1990/qwenwork-magpie/tree/v0.1.0) 的协议适配代码开发。上游与第三方版权信息见 [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md)。千问办公官方组件不在本项目的许可范围内。

@@ -1,0 +1,18 @@
+{
+  "name": "pi-qwenwork-provider",
+  "version": "0.2.2",
+  "private": true,
+  "type": "module",
+  "description": "QwenWork provider for Pi and Pi Web with independent browser authorization",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "git+https://github.com/ErkundenSie/pi-qwenwork-provider.git" },
+  "engines": { "node": ">=22.19.0" },
+  "files": ["index.mjs", "lib/", "scripts/doctor.mjs", "CHANGELOG.md", "THIRD_PARTY_NOTICES.md", ".qwenwork.example.json"],
+  "peerDependencies": { "@earendil-works/pi-ai": "*" },
+  "keywords": ["pi-package", "qwenwork"],
+  "pi": { "extensions": ["./index.mjs"] },
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "doctor": "node scripts/doctor.mjs"
+  }
+}

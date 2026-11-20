@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+      - name: Install Pi test SDK
+        run: npm install --prefix .ci-sdk --ignore-scripts --no-audit --no-fund @earendil-works/pi-ai@1.5.2
+      - name: Run tests
+        env:
+          PI_QWENWORK_SDK_ROOT: ${{ github.workspace }}/.ci-sdk
+        run: npm test

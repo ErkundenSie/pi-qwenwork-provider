@@ -1,0 +1,10 @@
+node_modules/
+.ci-sdk/
+.qwenwork.local.json
+.pi/
+auth.json
+.env
+.env.*
+*.log
+*.tgz
+*.wasm

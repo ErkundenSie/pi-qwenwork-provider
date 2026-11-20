@@ -223,6 +223,24 @@ test('the request uses the desktop output budget and preserves lower caller limi
   assert.throws(() => buildRequest({ ...request, max_tokens: -1 }), /正整数/)
 })
 
+test('DeepSeek Flash gets file-first guidance only when file tools are available', () => {
+  const write = { type: 'function', function: { name: 'write', parameters: { type: 'object' } } }
+  const developer = { role: 'developer', content: 'Honor the project rules.' }
+  const messages = [developer, user]
+  const request = { model: 'deepseek-flash', messages, tools: [write] }
+  const guided = buildRequest(request)
+  assert.match(guided.system, /^Honor the project rules\./)
+  assert.match(guided.system, /before|after the first successful file write/)
+  assert.equal(guided.messages[0].content, guided.system)
+  assert.equal(guided.messages.at(-1).content, user.content)
+  assert.deepEqual(guided.tools, [write])
+  assert.deepEqual(developer, { role: 'developer', content: 'Honor the project rules.' })
+  assert.match(buildRequest({ ...request, messages: [user] }).messages[0].content, /file creation or edit/)
+  for (const variation of [{ tools: [] }, { model: 'glm-5.3' }, { tool_choice: 'none' }]) {
+    assert.equal(buildRequest({ ...request, ...variation }).system, developer.content)
+  }
+})
+
 test('host SDK sends the 32K budget for DeepSeek Flash with reasoning enabled', sdk, async () => {
   let signed
   const config = await sdkConfig(frame(chunk({ content: 'ok' }, 'stop')) + done, body => { signed = body })
